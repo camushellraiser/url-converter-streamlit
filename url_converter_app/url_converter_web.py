@@ -1,8 +1,9 @@
-
 import streamlit as st
 import pandas as pd
-import os
+from urllib.parse import urlparse
 from io import BytesIO
+
+st.set_page_config(page_title="🌐 URL Converter Web", layout="centered")
 
 # Language-to-path mapping
 LANG_MAP = {
@@ -18,16 +19,19 @@ LANG_MAP = {
 }
 
 def clean_url(url):
-    if not isinstance(url, str) or "/home/" not in url:
+    if not isinstance(url, str):
         return None
-    parts = url.split("/home/", 1)
-    return "/home/" + parts[1].replace(".html", "") if len(parts) > 1 else None
+    parsed = urlparse(url)
+    path = parsed.path
+    if "/home/" not in path:
+        return None
+    cleaned = path.split("/home/", 1)[1].removesuffix(".html")
+    return "/home/" + cleaned
 
-def process_excel(file):
+def process_file(file):
     df = pd.read_excel(file, sheet_name=0, header=3)
     results = []
     url_col = "URL in AEM"
-
     language_columns = [col for col in df.columns if any(code in str(col) for code in LANG_MAP.keys())]
 
     for _, row in df.iterrows():
@@ -44,29 +48,28 @@ def process_excel(file):
                         "Localized Path": LANG_MAP[code] + cleaned_path
                     })
 
-    return pd.DataFrame(results)
+    result_df = pd.DataFrame(results)
+    return result_df.sort_values(by=["Language"])
 
-# Streamlit UI
-st.set_page_config(page_title="🌐 URL Converter", layout="centered")
-st.title("🌐 URL Converter")
-st.write("Upload your Excel file and get localized AEM URLs based on language selection.")
+st.title("🌍 URL Converter (Streamlit Web)")
 
-uploaded_file = st.file_uploader("📁 Upload Excel File", type=["xlsx", "xls"])
+uploaded_file = st.file_uploader("Upload Excel File (.xlsx)", type=["xlsx"])
 
-if uploaded_file is not None:
+if uploaded_file:
     try:
-        df_result = process_excel(uploaded_file)
+        df_result = process_file(uploaded_file)
         st.success("✅ Conversion completed!")
 
         st.dataframe(df_result)
 
-        buffer = BytesIO()
-        df_result.to_excel(buffer, index=False)
-        buffer.seek(0)
+        # Generate downloadable Excel
+        output = BytesIO()
+        df_result.to_excel(output, index=False)
+        output.seek(0)
 
         st.download_button(
-            label="📥 Download Converted File",
-            data=buffer,
+            label="📥 Download Converted Excel",
+            data=output,
             file_name="converted_urls.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
